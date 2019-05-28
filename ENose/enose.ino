@@ -1,3 +1,8 @@
+// ENose DAQ
+//
+// 2019-05-28
+// Kurt Stolle <k.h.w.stolle@gmail.com>
+
 #include <Arduino.h>
 #include <SPI.h>
 #include <stdlib.h>
@@ -14,14 +19,27 @@ static float t; // seconds
 static bool measuring = false;
 static unsigned long lastMeasurement = 0;
 
+// stopMeasuring stops the measurements
+void startMeasuring() {
+    measuring = true;
+    lastMeasurement = micros() - Ts * 2;
+    t = 0.0f;
+}
+
+void stopMeasuring() {
+    measuring = false;
+}
+
 // notifyOK sends ok -- lets the client know that the command was successful
-void notifyOK(){
+void notifyOK() {
     Serial.println("ok");
     Serial.flush();
 }
 
 // notifyError sends error messages
-void notifyError(const char* msg){
+void notifyError(const char *msg) {
+    stopMeasuring();
+
     Serial.print("error: ");
     Serial.println(msg);
     Serial.flush();
@@ -54,18 +72,16 @@ void setSensitivity(short nSensor, byte scale) {
     digitalWrite(mcpCS[chip], HIGH);     // Set CS pin to HIGH
 }
 
-void readSamplingRate(){
+void readSamplingRate() {
     if (measuring) return;
 
     // begin setting of sampling rate
     float fsNew = Serial.parseFloat();
     if (fsNew <= 0) {
-        Serial.println("error: invalid frequency in Hz given");
-        Serial.flush();
+        notifyError("invalid frequency in Hz given");
         return;
     } else if (fsNew > 10000) {
-        Serial.println("error: frequency exceeds limit (10kHz)");
-        Serial.flush();
+        notifyError("frequency exceeds limit (10kHz)");
         return;
     }
 
@@ -78,34 +94,33 @@ void readCalibration() {
     short sensor = Serial.parseInt();
     short value = Serial.parseInt();
 
-    if (sensor < 1 || sensor > 8){
-        notifyError("invalid sensor")
-        measuring = false;
-    } else if (value < 0 || value > 255){
-        notifyError("invalid value")
-        measuring = false;
+    if (sensor < 1 || sensor > 8) {
+        notifyError("invalid sensor");
+        return;
+    } else if (value < 0 || value > 255) {
+        notifyError("invalid value");
+        return;
     }
 
-    setSensitivity(sensor,value);
+    setSensitivity(sensor, value);
 
-    if (measuring) return;
-
-    notifyOK();
+    if (!measuring) notifyOK();
 }
 
-void readFlow(){
+void readFlow() {
     // read through which chamber the flow should go
     short chamber = Serial.parseInt();
 
     // validate the input
-    if (sensor != 0 && sensor != 1){
-        notifyError("invalid flow direction")
+    if (chamber != 0 && chamber != 1) {
+        notifyError("invalid flow direction");
+        return;
     }
 
     // since we have only two directions, simply write the binary value
-    digitalWrite(flowControlPin, (sensor==0) ? LOW : HIGH);
+    digitalWrite(flowControlPin, (chamber == 0) ? LOW : HIGH);
 
-    notifyOK();
+    if (!measuring) notifyOK();
 }
 
 // executeCommand reads the command currently in Serial input and acts accordingly
@@ -117,11 +132,7 @@ void executeCommand() {
             if (measuring) break;
 
             notifyOK();
-
-            // Set starting environment
-            measuring=true;
-            lastMeasurement = micros() - Ts * 2;
-            t = 0.0f;
+            startMeasuring();
 
             break;
         case 'i': // Info
@@ -132,7 +143,7 @@ void executeCommand() {
 
             break;
         case 'r': // Reset
-            measuring=false;
+            stopMeasuring();
 
             notifyOK();
 
@@ -168,14 +179,13 @@ void writeMeasurement() {
         measurements[6] += analogRead(A6);
         measurements[7] += analogRead(A7);
     }
-    for (int i = 0; i < 8; i++) {
-        measurements[i] /= nAverage;
-    }
+
+    for (int i = 0; i < 8; i++) measurements[i] /= nAverage;
 
     // Check if we're not too quick
     if (Serial.availableForWrite() < 20) {
         Serial.println("error: serial buffer overfow");
-        measuring=false;
+        stopMeasuring();
         return;
     }
 
@@ -188,16 +198,17 @@ void writeMeasurement() {
 
 // setup function
 void setup() {
-    // setup pins
+    // setup SPI pins
     for (int i = 0; i < 4; i++) {
         pinMode(mcpCS[i], OUTPUT);
         pinMode(mcpCS[i], HIGH);
     }
     SPI.begin();
-    for (int i = 1; i <= 8; i++) {
-        setSensitivity(i, 128); // initialize with 50% sensitivity
-    }
 
+    // set default sensitivity
+    for (int i = 1; i <= 8; i++) setSensitivity(i, 128);
+
+    // setup analog pins for sensor input
     pinMode(A0, INPUT);
     pinMode(A1, INPUT);
     pinMode(A2, INPUT);
@@ -217,11 +228,6 @@ void setup() {
 
 // main loop
 void loop() {
-    // if there is a command available, read it and set the status accordingly
-    while (Serial.available()) {
-        executeCommand();
-    }
-    if (shouldMeasure()) {
-        writeMeasurement();
-    }
+    while (Serial.available()) executeCommand();
+    if (shouldMeasure()) writeMeasurement();
 }
