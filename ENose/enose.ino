@@ -6,12 +6,26 @@
 static unsigned long Ts = 4000; // micros = 250 Hz sampling rate
 static const int nAverage = 2; // sample averaging to avoid malicious spikes
 static const int mcpCS[4] = {2, 3, 4, 5};
+static const int flowControlPin = 0;
 
 // globals
 static int16_t measurements[8] = {0};
 static float t; // seconds
 static bool measuring = false;
 static unsigned long lastMeasurement = 0;
+
+// notifyOK sends ok -- lets the client know that the command was successful
+void notifyOK(){
+    Serial.println("ok");
+    Serial.flush();
+}
+
+// notifyError sends error messages
+void notifyError(const char* msg){
+    Serial.print("error: ");
+    Serial.println(msg);
+    Serial.flush();
+}
 
 // shouldMeasure returns true if a certain amount of ms has passed (sampling frequency)
 bool shouldMeasure() {
@@ -56,8 +70,8 @@ void readSamplingRate(){
     }
 
     Ts = static_cast<unsigned long>(1000000 / fsNew);
-    Serial.println("ok");
-    Serial.flush();
+
+    notifyOK();
 }
 
 void readCalibration() {
@@ -65,10 +79,10 @@ void readCalibration() {
     short value = Serial.parseInt();
 
     if (sensor < 1 || sensor > 8){
-        Serial.println("error: invalid sensor");
+        notifyError("invalid sensor")
         measuring = false;
     } else if (value < 0 || value > 255){
-        Serial.println("error: invalid value");
+        notifyError("invalid value")
         measuring = false;
     }
 
@@ -76,9 +90,23 @@ void readCalibration() {
 
     if (measuring) return;
 
-    Serial.println("ok");
+    notifyOK();
 }
 
+void readFlow(){
+    // read through which chamber the flow should go
+    short chamber = Serial.parseInt();
+
+    // validate the input
+    if (sensor != 0 && sensor != 1){
+        notifyError("invalid flow direction")
+    }
+
+    // since we have only two directions, simply write the binary value
+    digitalWrite(flowControlPin, (sensor==0) ? LOW : HIGH);
+
+    notifyOK();
+}
 
 // executeCommand reads the command currently in Serial input and acts accordingly
 void executeCommand() {
@@ -88,8 +116,7 @@ void executeCommand() {
         case 'm': // Measure
             if (measuring) break;
 
-            Serial.println("ok");
-            Serial.flush();
+            notifyOK();
 
             // Set starting environment
             measuring=true;
@@ -100,20 +127,21 @@ void executeCommand() {
         case 'i': // Info
             if (measuring) break;
 
-            Serial.println("ok");
+            notifyOK();
             Serial.println(static_cast<int>(1 / (static_cast<double>(Ts)) * 1000000));
-            Serial.flush();
 
             break;
         case 'r': // Reset
-            // reset state
             measuring=false;
-            Serial.println("ok");
-            Serial.flush();
+
+            notifyOK();
 
             break;
         case 's': // Samping rate
             readSamplingRate();
+            break;
+        case 'f': // Select flow
+            readFlow();
             break;
         case 'c': // Calibrate
             readCalibration();
@@ -184,6 +212,7 @@ void setup() {
 
     // announce that we're ready for commands
     Serial.println("ready");
+    Serial.flush();
 }
 
 // main loop
