@@ -4,13 +4,9 @@
 %
 % K.H.W. Stolle <k.h.w.stolle@gmail.com>
 % 2019-03-15
-clear;
-
-%% Configuration variables
-data_label = "kornuit";
-
+function capture(comPort,data_label)
 %% Open the ENoseDAQ
-enose = ENoseDAQ('COM8',0,0);
+enose = ENoseDAQ(comPort,0,0);
 enose.setSampleRate(100);
 enose.setSensitivity(1,128);
 enose.setSensitivity(2,128);
@@ -22,15 +18,8 @@ enose.setSensitivity(7,128);
 enose.setSensitivity(8,128);
 
 %% Capture
-disp("3...");
-pause(1);
-disp("2...");
-pause(1);
-disp("1...");
-pause(1);
 disp("starting!");
-data = enose.capture(10, [1 4]);
-
+data = enose.capture(20, [2 10]);
 
 % Save the data to a file
 csvwrite(data_label + "_" + datestr(now,'yyyy-mm-dd_HH-MM-SS') + ".csv",data);
@@ -45,3 +34,7 @@ xlabel("Time t [s]");
 ylabel("Sensor reading s_i [V]");
 axis([min(t) max(t) min(sensors(:))*0.9 max(sensors(:))*1.1]);
 legend("MQ-2","MQ-3","MQ-4","MQ-5","MQ-6","MQ-7","MQ-8","MQ-138");
+
+% Close the enose
+enose.delete()
+end

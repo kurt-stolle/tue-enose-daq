@@ -1,9 +1,9 @@
 % ENoseDAQ implements a data aquisition device for an electronic nose that is controlled via an Arduino Nano
-%  
-% K.H.W. Stolle <k.h.w.stolle@gmail.com> 
+%
+% K.H.W. Stolle <k.h.w.stolle@gmail.com>
 % 2019-03-15N
-% 
-% 
+%
+%
 
 classdef ENoseDAQ < handle
     properties (SetAccess = private)
@@ -15,21 +15,21 @@ classdef ENoseDAQ < handle
         function enose = ENoseDAQ(comPort, continuous, callback)
             % check whether there is already an ENoseDAQ connected
             delete(instrfind({'Port', 'Tag'}, {comPort, 'ENoseDAQ'}));
-
+            
             % open a new serial connection
-            enose.s = serial(comPort,'BaudRate',115200, 'Tag', 'ENoseDAQ');            
+            enose.s = serial(comPort,'BaudRate',115200, 'Tag', 'ENoseDAQ');
             %enose.s.InputBufferSize = 10 * 17 * 200;
             
             % streaming mode
             if continuous
-                enose.s.BytesAvailableFcnCount = 4*17+1; 
+                enose.s.BytesAvailableFcnCount = 4*17+1;
                 enose.s.BytesAvailableFcnMode = 'byte';
                 enose.s.BytesAvailableFcn = @(~,~) callback();
             end
             
             % open stream
             fopen(enose.s);
-                
+            
             % the program running on the arduino should have reset now,
             % wait until we receive the 'ready' signal
             msg = fscanf(enose.s,'%s\n');
@@ -44,7 +44,7 @@ classdef ENoseDAQ < handle
             v = enose.isValid;
         end
         
-        function delete(enose)           
+        function delete(enose)
             % stop gracefully by closing the serial connection
             fclose(enose.s);
             delete(enose.s);
@@ -52,25 +52,26 @@ classdef ENoseDAQ < handle
         
         % reset stops measurements
         function reset(enose)
-            fprintf(enose.s,"r");
-            flushinput(enose.s);
+            enose.sendCommand("r");
             enose.started = false;
+            msg = fscanf(enose.s,'%s\n');
+            disp(msg);
             enose.clear();
         end
         
         % start will start a stream of measurements
         function start(enose)
-           enose.sendCommand('m');
-           enose.started = true;
+            enose.sendCommand('m');
+            enose.started = true;
         end
         
         % isStarted
         function s = isStarted(enose)
             s = enose.started;
         end
-                
+        
         % read reads a measurement from Serial
-        function m = read(enose)           
+        function m = read(enose)
             t = fread(enose.s,1,'float32');
             d = fread(enose.s,8,'int16');
             
@@ -79,14 +80,14 @@ classdef ENoseDAQ < handle
         
         % program delays
         function delayMark(enose, time)
-            enose.sendCommand("d" + int2str(time)); 
+            enose.sendCommand("d" + int2str(time));
         end
         
         % program valve
         function switchValve(enose, state)
-           enose.sendCommand("f" + int2str(state)); 
+            enose.sendCommand("f" + int2str(state));
         end
-       
+        
         
         % capture captures for a certain amount of milliseconds and then
         % stops capturing
@@ -100,7 +101,14 @@ classdef ENoseDAQ < handle
             
             % Take the calculated amount of measurements
             enose.switchValve(0);
-            enose.start();            
+            enose.start();
+            if exist('marks','var')
+                for i=1:numel(marks)
+                    enose.delayMark(marks(i))
+                    enose.switchValve(mod(i,2))
+                end
+            end
+            enose.delayMark(time)
             for n=1:samples
                 c(n,:) = enose.read();
             end
@@ -116,24 +124,27 @@ classdef ENoseDAQ < handle
         % be read from the input
         function m = measurementsAvailable(enose)
             if enose.started == false
-               m = 0;
-               return;
+                m = 0;
+                return;
             end
             m = floor(enose.s.bytesAvailable/17);
         end
         
         % clear wipes all data
         function clear(enose)
-           while enose.dataAvailable()
-              fread(enose.s,1,'int8');
-           end
+            %             while enose.dataAvailable()
+            %                 fread(enose.s,1,'int8');
+            %             end
+            if enose.s.BytesAvailable > 0
+                fread(enose.s, enose.s.BytesAvailable);
+            end
         end
         
         % setSampleRate sets the sample rate in Hz
         function setSampleRate(enose,rate)
-          	enose.sendCommand("s" + int2str(rate));
+            enose.sendCommand("s" + int2str(rate));
         end
-             
+        
         % getSamplingRate returns fs
         function fs = getSampleRate(enose)
             enose.sendCommand('i');
@@ -142,7 +153,7 @@ classdef ENoseDAQ < handle
         
         % setSensitivity sets the calibration values [0,255]
         function setSensitivity(enose,sensor,value)
-           enose.sendCommand("c" + int2str(sensor) + ":" + int2str(value)); 
+            enose.sendCommand("c" + int2str(sensor) + ":" + int2str(value));
         end
         
         % sendCommand issues a raw command
