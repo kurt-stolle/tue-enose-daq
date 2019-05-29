@@ -11,12 +11,13 @@
 static unsigned long Ts = 4000; // micros = 250 Hz sampling rate
 static const int nAverage = 2; // sample averaging to avoid malicious spikes
 static const int mcpCS[4] = {2, 3, 4, 5};
-static const int flowControlPin = 0;
+static const int flowControlPin = 10;
 
 // globals
 static int16_t measurements[8] = {0};
-static float t; // seconds
+static float t = 0; // seconds
 static bool measuring = false;
+static float delayMark = 0; // seconds
 static unsigned long lastMeasurement = 0;
 
 // stopMeasuring stops the measurements
@@ -43,6 +44,9 @@ void notifyError(const char *msg) {
     Serial.print("error: ");
     Serial.println(msg);
     Serial.flush();
+    while (Serial.available()){
+        Serial.read();
+    }
 }
 
 // shouldMeasure returns true if a certain amount of ms has passed (sampling frequency)
@@ -125,18 +129,35 @@ void readFlow() {
 
 // executeCommand reads the command currently in Serial input and acts accordingly
 void executeCommand() {
+    if (measuring && delayMark > 0 && t < delayMark) return;
+
     // read value on Serial and cast to char
     auto cmd = Serial.read();
     switch (cmd) {
         case 'm': // Measure
-            if (measuring) break;
+            if (measuring) {
+                notifyError("command unavailable while measuring");
+                break;
+            }
 
             notifyOK();
             startMeasuring();
 
             break;
+        case 'd': // Delay -- do not read until a certain time [s] was reached
+            if (!measuring) {
+                notifyError("command unavailable while not measuring");
+                break;
+            }
+
+            delayMark = Serial.parseFloat();
+
+            break;
         case 'i': // Info
-            if (measuring) break;
+            if (measuring) {
+                notifyError("command unavailable while measuring");
+                break;
+            }
 
             notifyOK();
             Serial.println(static_cast<int>(1 / (static_cast<double>(Ts)) * 1000000));
@@ -144,9 +165,7 @@ void executeCommand() {
             break;
         case 'r': // Reset
             stopMeasuring();
-
             notifyOK();
-
             break;
         case 's': // Samping rate
             readSamplingRate();
@@ -198,6 +217,10 @@ void writeMeasurement() {
 
 // setup function
 void setup() {
+    // setup pin for flow control
+    pinMode(flowControlPin, OUTPUT);
+    digitalWrite(flowControlPin, LOW);
+
     // setup SPI pins
     for (int i = 0; i < 4; i++) {
         pinMode(mcpCS[i], OUTPUT);
@@ -228,6 +251,6 @@ void setup() {
 
 // main loop
 void loop() {
-    while (Serial.available()) executeCommand();
+    if (Serial.available()) executeCommand();
     if (shouldMeasure()) writeMeasurement();
 }

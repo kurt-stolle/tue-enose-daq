@@ -77,9 +77,20 @@ classdef ENoseDAQ < handle
             m = [t,d'];
         end
         
+        % program delays
+        function delayMark(enose, time)
+            enose.sendCommand("d" + int2str(time)); 
+        end
+        
+        % program valve
+        function switchValve(enose, state)
+           enose.sendCommand("f" + int2str(state)); 
+        end
+       
+        
         % capture captures for a certain amount of milliseconds and then
         % stops capturing
-        function c = capture(enose,time)
+        function c = capture(enose,time, marks)
             % Calculate how many measurements to expect
             fs = enose.getSampleRate();
             samples = fs*time;
@@ -87,7 +98,8 @@ classdef ENoseDAQ < handle
             % Allocate c
             c = zeros(samples,9);
             
-            % Take the calculated amount of measurements         
+            % Take the calculated amount of measurements
+            enose.switchValve(0);
             enose.start();            
             for n=1:samples
                 c(n,:) = enose.read();
@@ -138,7 +150,7 @@ classdef ENoseDAQ < handle
             % send a command over Serial
             fprintf(enose.s,cmd);
             
-            if (enose.started)
+            if enose.started
                 return
             end
             
