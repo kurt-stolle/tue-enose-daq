@@ -52,10 +52,8 @@ classdef ENoseDAQ < handle
         
         % reset stops measurements
         function reset(enose)
-            enose.sendCommand("r");
+            fprintf(enose.s,'r');
             enose.started = false;
-            msg = fscanf(enose.s,'%s\n');
-            disp(msg);
             enose.clear();
         end
         
@@ -132,11 +130,8 @@ classdef ENoseDAQ < handle
         
         % clear wipes all data
         function clear(enose)
-            %             while enose.dataAvailable()
-            %                 fread(enose.s,1,'int8');
-            %             end
-            if enose.s.BytesAvailable > 0
-                fread(enose.s, enose.s.BytesAvailable);
+            while enose.dataAvailable()
+                fread(enose.s,1);
             end
         end
         

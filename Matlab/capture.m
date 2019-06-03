@@ -4,22 +4,21 @@
 %
 % K.H.W. Stolle <k.h.w.stolle@gmail.com>
 % 2019-03-15
-function capture(comPort,data_label)
+function capture(comPort,time,marks,data_label)
 %% Open the ENoseDAQ
 enose = ENoseDAQ(comPort,0,0);
 enose.setSampleRate(100);
-enose.setSensitivity(1,128);
-enose.setSensitivity(2,128);
-enose.setSensitivity(3,128);
-enose.setSensitivity(4,128);
-enose.setSensitivity(5,128);
-enose.setSensitivity(6,128);
-enose.setSensitivity(7,128);
-enose.setSensitivity(8,128);
+enose.setSensitivity(1,240);
+enose.setSensitivity(2,240);
+enose.setSensitivity(3,240);
+enose.setSensitivity(5,240);
+enose.setSensitivity(6,240);
+enose.setSensitivity(7,240);
+enose.setSensitivity(8,240);
 
 %% Capture
 disp("starting!");
-data = enose.capture(20, [2 10]);
+data = enose.capture(time, marks);
 
 % Save the data to a file
 csvwrite(data_label + "_" + datestr(now,'yyyy-mm-dd_HH-MM-SS') + ".csv",data);
